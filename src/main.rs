@@ -4,8 +4,12 @@ use std::{
 
 
 fn main() {
-	let game = Game::new();
-    println!("{}", game);
+	let mut game = GameManager::console_game();
+	
+	game.run();
+
+	//let game = Game::new();
+    //println!("{}", game);
     
     //println!("{}", Cord::new(0,0));
 }
@@ -260,7 +264,7 @@ impl Board {
 		).sum()
 	}
 	
-	fn make_move(&mut self, m: Move) {
+	fn make_move(&mut self, m: &Move) {
 		self.0[m.to.x as usize][m.to.y as usize] =
 		 self.0[m.from.x as usize][m.from.y as usize].get_const();
 		
@@ -324,7 +328,7 @@ impl Game {
 		}
 	}
 	
-	fn make_move(&mut self, m: Move) {
+	fn make_move(&mut self, m: &Move) {
 		self.board.make_move(m);
 		self.turn = !self.turn;
 	}
@@ -388,10 +392,38 @@ enum Player{
 impl Player {
 	
 	//mutable self to allow persistent reusable nodes for some engines
-	fn get_move(&mut self, game: Game) -> Move {
-		MOVE_NONE//placeholder value, replace
+	fn get_move(&mut self, game: &Game) -> Move {
+		match self {
+			Player::Console => self.console_move(game),
+			Player::ComputerV1 => MOVE_NONE//placeholder value, replace
+		}
 	}
 	
+	fn console_move(&mut self, game: &Game) -> Move {
+		println!("Enter move:");
+    	let mut guess = String::new();
+ 
+    	io::stdin().read_line(&mut guess).expect("failed to readline");
+    	
+    	let mut chars = guess.chars();
+    	
+    	let char1 = chars.next().expect("first character not found") as u8 -97;
+    	let char2 = chars.next().expect("first character not found") as u8 -49;
+    	let char3 = chars.next().expect("first character not found") as u8 -97;
+    	let char4 = chars.next().expect("first character not found") as u8 -49;
+    	
+    	Move{
+    		from: Cord{ x: char2, y: char1 },
+    		to:   Cord{ x: char4, y: char3 }
+    	}
+	}
+	
+	fn is_human(&self) -> bool {
+		match self {
+			Player::Console => true,// | other
+			_ => false
+		}
+	}
 	
 }
 
@@ -401,7 +433,7 @@ enum DisplayType {
 }
 
 impl DisplayType {
-	fn show(&self, game: Game){
+	fn show(&self, game: &Game){
 		match self{
 			DisplayType::Console => println!("{}", game),
 			DisplayType::GUI => println!("Not Implemented Yet!")
@@ -426,15 +458,25 @@ impl GameManager {
 		}
 	}
 	
+	fn console_game() -> GameManager {
+		GameManager{
+			game: Game::new(),
+			player_white: Player::Console,
+			player_black: Player::Console,
+			display: DisplayType::Console
+		}
+	}
+	
 	fn run(&mut self) -> GameState {
 		while let GameState::Ongoing = self.game.game_state() {
-			if self.game.turn {
-				self.game.make_move( self.player_white.get_move(self.game) );
-			} else {
-				self.game.make_move( self.player_black.get_move(self.game) );
-			}
-			self.display.show(self.game);
+			self.display.show(&self.game);
+			self.game.make_move(
+				&if self.game.turn 	{ &mut self.player_white }
+				else 				{ &mut self.player_black }
+					.get_move(&self.game)
+			);
 		}
+		self.display.show(&self.game);
 		self.game.game_state()
 	}
 }
