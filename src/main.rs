@@ -407,10 +407,10 @@ impl Player {
     	
     	let mut chars = guess.chars();
     	
-    	let char1 = chars.next().expect("first character not found") as u8 -97;
-    	let char2 = chars.next().expect("first character not found") as u8 -49;
-    	let char3 = chars.next().expect("first character not found") as u8 -97;
-    	let char4 = chars.next().expect("first character not found") as u8 -49;
+    	let char1 = chars.next().expect("1st character not found") as u8 -97;
+    	let char2 = chars.next().expect("2nd character not found") as u8 -49;
+    	let char3 = chars.next().expect("3rd character not found") as u8 -97;
+    	let char4 = chars.next().expect("4th character not found") as u8 -49;
     	
     	Move{
     		from: Cord{ x: char2, y: char1 },
