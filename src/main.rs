@@ -1,5 +1,5 @@
 use std::{
-	fmt, io
+	fmt, io, cmp
 };
 
 
@@ -222,37 +222,32 @@ impl PieceType {
 	}
 }
 
-struct CordOffset {
+#[derive(Copy, Clone, Debug)]
+struct Cord {
 	x: i8,
 	y: i8
 }
 
-#[derive(Copy, Clone)]
-struct Cord {
-	x: u8,
-	y: u8
-}
-
 impl Cord {
-	fn new(x:u8, y:u8) -> Cord {
+	fn new(x:i8, y:i8) -> Cord {
 		Cord{ x, y }
 	}
 	
-	fn from_tuple(x: (u8, u8)) -> Cord {
+	fn from_tuple(x: (i8, i8)) -> Cord {
 		Cord{ x:x.0, y:x.1 }
 	}
 	
 	fn offset_xy(&self, x:i8, y:i8) -> Cord {
 		Cord{
-			x:(self.x as i8 + x) as u8,
-			y:(self.y as i8 + y) as u8
+			x:self.x + x,
+			y:self.y + y
 		}
 	}
 	
 	
 	fn offset_x(&self, x:i8) -> Cord {
 		Cord{
-			x:(self.x as i8 + x) as u8,
+			x:self.x + x,
 			y:self.y
 		}
 	}
@@ -260,17 +255,9 @@ impl Cord {
 	fn offset_y(&self, y:i8) -> Cord {
 		Cord{
 			x:self.x,
-			y:(self.y as i8 + y) as u8
+			y:self.y + y
 		}
 	}
-	
-	fn offset(&self, o: CordOffset) -> Cord {
-		Cord{
-			x:(self.x as i8 + o.x) as u8,
-			y:(self.y as i8 + o.y) as u8
-		}
-	}
-	
 	
 	fn sum(&self, cord: &Cord) -> Cord {
 		Cord{
@@ -303,13 +290,13 @@ impl Cord {
 impl fmt::Display for Cord {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}{}",
-        	(self.x + 97) as char,
+        	(self.x + 97) as u8 as char,
         	self.y+1
         )
     }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 struct Move {
 	from: Cord,
 	to: Cord
@@ -323,7 +310,7 @@ impl Move {
 
 impl fmt::Display for Move {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{},{}",
+        write!(f, "({},{})",
         	self.from, self.to
         )
     }
@@ -404,10 +391,10 @@ impl Board {
 	}
 	
 	fn make_move(&mut self, m: &Move) {
-		self.0[m.to.x as usize][m.to.y as usize] =
-		 self.0[m.from.x as usize][m.from.y as usize].get_const();
+		self.0[m.to.y as usize][m.to.x as usize] =
+		 self.0[m.from.y as usize][m.from.x as usize].get_const();
 		
-		self.0[m.from.x as usize][m.from.y as usize] = EMPTY;
+		self.0[m.from.y as usize][m.from.x as usize] = EMPTY;
 	}
 	
 }
@@ -472,17 +459,29 @@ impl Game {
 		self.turn = !self.turn;
 	}
 	
-	/*
+	
 	fn get_moves(&self) -> Vec<Move> {
-		self.board.0.iter()
-			.filter(|x| if let Square::Peice(piece) = x {true})
-			.map(|x| if let Square::Peice(piece) = x { x.get_moves()} )
-			.collect()
+		let mut v = Vec::<Move>::new();
+		let mut count : u8 = 0;
+		for x in 0..8 {
+			for y in 0..8 {
+				let cord = Cord::new(x,y);
+				//println!("{}",cord);
+				if let SquareComparison::ColorSame = self.square_at(cord).compareColor(self.turn) {
+					v.extend(self.get_moves_cord(cord));
+					count += 1;
+					if count == 16 {//max pieces of one color, replace with variable that tracks amount left when it is implemented
+						return v;
+					}
+				}
+			}
+		}
+		
+		v
 	}
-	*/
 	
 	fn square_at(&self, cord: Cord) -> Square {
-		self.board.0[cord.x as usize][cord.y as usize]
+		self.board.0[cord.y as usize][cord.x as usize]
 	}
 	
 	fn get_moves_cord(&self, cord: Cord) -> Vec<Move> {
@@ -503,9 +502,13 @@ impl Game {
 	}
 	
 	fn get_pawn_moves(&self, cord: Cord, color: bool) -> Vec<Move> {
+		
+		//TODO: en passant, all the different promotions (Knight, bishop, rook, queen - will probably auto queen for now)
 		let mut v = Vec::<Move>::new();
+		//maybe reserve some space for the vector performance, like the max (4, not accounting possible promotions)
 		if color {//white
 			let to = cord.offset_y(1);
+			//println!("{}",to);
 			if let Empty = self.square_at(to) {
 				v.push(Move::new(cord,to));
 				
@@ -517,14 +520,14 @@ impl Game {
 				}
 			}
 			
-			{
+			if cord.x < 7 {
 				let to = to.offset_x(1);
 				if let SquareComparison::ColorOther = self.square_at(to).compareColor(color) {
 					v.push(Move::new(cord,to));
 				}
 			}
 			
-			{
+			if cord.x > 0 {
 				let to = to.offset_x(-1);
 				if let SquareComparison::ColorOther = self.square_at(to).compareColor(color) {
 					v.push(Move::new(cord,to));
@@ -545,14 +548,14 @@ impl Game {
 				}
 			}
 			
-			{
+			if cord.x < 7 {
 				let to = to.offset_x(1);
 				if let SquareComparison::ColorOther = self.square_at(to).compareColor(color) {
 					v.push(Move::new(cord,to));
 				}
 			}
 			
-			{
+			if cord.x > 0 {
 				let to = to.offset_x(-1);
 				if let SquareComparison::ColorOther = self.square_at(to).compareColor(color) {
 					v.push(Move::new(cord,to));
@@ -562,9 +565,10 @@ impl Game {
 		v
 	}
 	
-	//maybe optimize with out of bounds check
+	//maybe optimize with custom out of bounds check
 	fn get_knight_moves(&self, cord: Cord, color: bool) -> Vec<Move> {
 		let mut v = Vec::<Move>::new();
+		//maybe reserve some space for the vector performance, like the max (8)
 		
 		let to = cord.offset_xy(1,2);
 		self.add_if_unobstructed_cords(&mut v, &cord, &to, color);
@@ -595,21 +599,155 @@ impl Game {
 	
 	fn get_bishop_moves(&self, cord: Cord, color: bool) -> Vec<Move> {
 		let mut v = Vec::<Move>::new();
+		//maybe reserve some space for the vector performance, like the max (13)
+		
+		//up right
+		let mut i : i8 = 1;
+		let mut end : i8 = 8 - cmp::max(cord.x,cord.y);
+		while i < end {
+			let to = cord.offset_xy(i,i);
+			match self.square_at(to).compareColor(color) {
+				SquareComparison::Empty => v.push(Move::new(cord, to)),
+				SquareComparison::ColorSame => break,
+				SquareComparison::ColorOther => {v.push(Move::new(cord, to)); break}
+			}
+			i += 1;
+		}
+		
+		//down left
+		i = 1;
+		end = cmp::min(cord.x,cord.y);
+		while i < end {
+			let to = cord.offset_xy(-i,-i);
+			match self.square_at(to).compareColor(color) {
+				SquareComparison::Empty => v.push(Move::new(cord, to)),
+				SquareComparison::ColorSame => break,
+				SquareComparison::ColorOther => {v.push(Move::new(cord, to)); break}
+			}
+			i += 1;
+		}
+		
+		//up left
+		i = 1;
+		end = cmp::min(cord.x, 7 - cord.y);
+		while i < end {
+			let to = cord.offset_xy(-i,i);
+			match self.square_at(to).compareColor(color) {
+				SquareComparison::Empty => v.push(Move::new(cord, to)),
+				SquareComparison::ColorSame => break,
+				SquareComparison::ColorOther => {v.push(Move::new(cord, to)); break}
+			}
+			i += 1;
+		}
+		
+		// down right
+		i = 1;
+		end = cmp::min(7 - cord.x, cord.y);
+		while i < end {
+			let to = cord.offset_xy(i,-i);
+			match self.square_at(to).compareColor(color) {
+				SquareComparison::Empty => v.push(Move::new(cord, to)),
+				SquareComparison::ColorSame => break,
+				SquareComparison::ColorOther => {v.push(Move::new(cord, to)); break}
+			}
+			i += 1;
+		}
+		
 		v
 	}
 	
 	fn get_rook_moves(&self, cord: Cord, color: bool) -> Vec<Move> {
 		let mut v = Vec::<Move>::new();
+		//maybe reserve some space for the vector performance, like the max (14)
+		
+		//up
+		let mut i : i8 = cord.y + 1;
+		while i < 8 {
+			let to = Cord::new(cord.x,i);
+			match self.square_at(to).compareColor(color) {
+				SquareComparison::Empty => v.push(Move::new(cord, to)),
+				SquareComparison::ColorSame => break,
+				SquareComparison::ColorOther => {v.push(Move::new(cord, to)); break}
+			}
+			i += 1;
+		}
+		
+		//down
+		i = cord.y - 1;
+		while i >=0 {
+			let to = Cord::new(cord.x,i);
+			match self.square_at(to).compareColor(color) {
+				SquareComparison::Empty => v.push(Move::new(cord, to)),
+				SquareComparison::ColorSame => break,
+				SquareComparison::ColorOther => {v.push(Move::new(cord, to)); break}
+			}
+			i -= 1;
+		}
+		
+		//right
+		i = cord.x + 1;
+		while i < 8 {
+			let to = Cord::new(i,cord.y);
+			match self.square_at(to).compareColor(color) {
+				SquareComparison::Empty => v.push(Move::new(cord, to)),
+				SquareComparison::ColorSame => break,
+				SquareComparison::ColorOther => {v.push(Move::new(cord, to)); break}
+			}
+			i += 1;
+		}
+		
+		//left
+		i = cord.x - 1;
+		while i >=0 {
+			let to = Cord::new(i,cord.y);
+			match self.square_at(to).compareColor(color) {
+				SquareComparison::Empty => v.push(Move::new(cord, to)),
+				SquareComparison::ColorSame => break,
+				SquareComparison::ColorOther => {v.push(Move::new(cord, to)); break}
+			}
+			i -= 1;
+		}
+		
 		v
 	}
 	
 	fn get_queen_moves(&self, cord: Cord, color: bool) -> Vec<Move> {
-		let mut v = Vec::<Move>::new();
+		let mut v = self.get_rook_moves(cord,color);
+		v.extend(self.get_bishop_moves(cord,color));
 		v
 	}
 	
+	//maybe optimize with custom out of bounds check
 	fn get_king_moves(&self, cord: Cord, color: bool) -> Vec<Move> {
 		let mut v = Vec::<Move>::new();
+		//maybe reserve some space for the vector performance, like the max (8)
+		
+		let to = cord.offset_xy(1,0);
+		self.add_if_unobstructed_cords(&mut v, &cord, &to, color);
+		
+		let to = cord.offset_xy(-1,0);
+		self.add_if_unobstructed_cords(&mut v, &cord, &to, color);
+		
+		let to = cord.offset_xy(0,1);
+		self.add_if_unobstructed_cords(&mut v, &cord, &to, color);
+		
+		let to = cord.offset_xy(0,-1);
+		self.add_if_unobstructed_cords(&mut v, &cord, &to, color);
+		
+		let to = cord.offset_xy(1,1);
+		self.add_if_unobstructed_cords(&mut v, &cord, &to, color);
+		
+		let to = cord.offset_xy(-1,1);
+		self.add_if_unobstructed_cords(&mut v, &cord, &to, color);
+		
+		let to = cord.offset_xy(1,-1);
+		self.add_if_unobstructed_cords(&mut v, &cord, &to, color);
+		
+		let to = cord.offset_xy(-1,-1);
+		self.add_if_unobstructed_cords(&mut v, &cord, &to, color);
+		
+		//TODO Castle moves
+		
 		v
 	}
 	
@@ -654,12 +792,23 @@ impl Game {
 
 impl fmt::Display for Game {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		
+		let moves = self.get_moves();
+		let mut moveStr = &mut moves.len().to_string();
+		*moveStr += "\n";
+		for c in moves {
+			moveStr.push_str(&(c.to_string() + ","));
+		}
+		moveStr.pop();
+	
         write!(f, "\
 {}
 |turn: {} |
-+------------+",
++------------+
+moves: {}",
         	self.board,
-        	self.turn_str()
+        	self.turn_str(),
+        	moveStr
         )
     }
 }
@@ -710,14 +859,14 @@ impl Player {
     	
     	let mut chars = guess.chars();
     	
-    	let char1 = chars.next().expect("1st character not found") as u8 -97;
-    	let char2 = chars.next().expect("2nd character not found") as u8 -49;
-    	let char3 = chars.next().expect("3rd character not found") as u8 -97;
-    	let char4 = chars.next().expect("4th character not found") as u8 -49;
+    	let char1 = chars.next().expect("1st character not found") as i8 -97;
+    	let char2 = chars.next().expect("2nd character not found") as i8 -49;
+    	let char3 = chars.next().expect("3rd character not found") as i8 -97;
+    	let char4 = chars.next().expect("4th character not found") as i8 -49;
     	
     	Move{
-    		from: Cord{ x: char2, y: char1 },
-    		to:   Cord{ x: char4, y: char3 }
+    		from: Cord{ x: char1, y: char2 },
+    		to:   Cord{ x: char3, y: char4 }
     	}
 	}
 	
